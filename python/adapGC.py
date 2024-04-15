@@ -292,7 +292,7 @@ def main():
     )
 
   try:
-      opts, args = getopt.getopt(sys.argv[1:], "i:o:t:")
+      opts, args = getopt.getopt(sys.argv[1:], "i:o:")
   except getopt.GetoptError as err:
     print(err)
     sys.exit(2)
@@ -307,9 +307,6 @@ def main():
     elif o == "-o":
       print(a)
       output = os.path.abspath(a)
-    elif o == "-t":
-      print(a)
-      target = a
     else:
       print(o)
       print(a)

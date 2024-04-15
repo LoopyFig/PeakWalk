@@ -372,8 +372,8 @@ dtw = False # parameter for whether we start with dtw
 # calculate deltappm range
 targets = pd.read_csv(sys.argv[3], sep=',')
 #targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid"]
-#targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid","formula","concentration"]
-targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid","formula","concentration","note","realRt"]
+targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid","formula","concentration"]
+#targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid","formula","concentration","note","realRt"]
 targets["tmzupper"] = targets.tmz.apply(lambda x: x+x*0.000005)
 targets["tmzlower"] = targets.tmz.apply(lambda x: x-x*0.000005)
 # if trt == "min":
