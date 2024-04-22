@@ -292,49 +292,52 @@ def main():
     )
 
   try:
-      opts, args = getopt.getopt(sys.argv[1:], "i:o:")
+      opts, args = getopt.getopt(sys.argv[1:], "r:a:s:")
   except getopt.GetoptError as err:
     print(err)
     sys.exit(2)
-  input=None
-  output=None
-  target=None
+  rawdir=None
+  adapdir=None
+  suffix=".mzXML"
   print(opts)
   for o, a in opts:
-    if o == "-i":
+    if o == "-r":
       print(a)
-      input = os.path.abspath(a)
-    elif o == "-o":
+      rawdir = os.path.abspath(a)
+    elif o == "-a":
       print(a)
-      output = os.path.abspath(a)
+      adapdir = os.path.abspath(a)
+    elif o == "-s":
+      print(a)
+      suffix = "." + a
     else:
       print(o)
       print(a)
       print("unhandled option")
       #sys.exit(2)
-  if not (input and output):
+  if not (rawdir and adapdir):
     print("missing options")
     sys.exit(2)
 
-  mzXML=[]
-  mzXML=findRaw(input, mzXML, 0)
-  for sample in mzXML:
-    samplepath = os.path.join(input, sample)
-    xmlpath = os.path.join(output, sample[:-5] + "adap.xml")
-    outputpath = os.path.join(output, sample[:-5] + "csv")
-    f=open(output + "/" + sample[:-5] + "adap.xml", "w")
+  raws=[]
+  raws=findRaw(rawdir, raws, suffix, 0)
+  for sample in raws:
+    samplepath = os.path.join(rawdir, sample)
+    xmlpath = os.path.join(adapdir, sample[:-len(suffix)] + ".adap.xml")
+    outputpath = os.path.join(adapdir, sample[:-len(suffix)] + ".csv")
+    f=open(adapdir + "/" + sample[:-len(suffix)] + ".adap.xml", "w")
     f.write(batchFile.format(mzXML=samplepath, output=outputpath))
     f.close()
 
-def findRaw(dir, mzXML, depth):
+def findRaw(dir, raws, suffix, depth):
   for element in os.listdir(dir):
     elementpath = os.path.join(dir, element)
     if os.path.isfile(elementpath):
-      if len(element) > 6 and element[-6:] == ".mzXML":
-        mzXML.append(element)
+      if len(element) > len(suffix) and element[-len(suffix):] == suffix:
+        raws.append(element)
     elif depth < 3:
-      mzXML = findRaw(elementpath, mzXML, depth+1)
-  return mzXML
+      raws = findRaw(elementpath, raws, depth+1)
+  return raws
 
 if __name__ == "__main__":
   main()

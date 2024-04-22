@@ -1,6 +1,6 @@
 #!/bin/bash
 
-while getopts ":h" option; do
+while getopts ":hrtoafbp" option; do
 	case $option in
 		h)
 			echo "-h Get Program Description"
@@ -28,8 +28,8 @@ done
 mkdir -p $adapdir
 mkdir -p $featuredir
 
-python3 python/adapGC.py -i $rawdir -o $adapdir
+python3 python/adapGC.py -r $rawdir -a $adapdir
 bash bash/runmzmine.sh $adapdir $processors
-python3 python/GCCombo.py $adapdir $featuredir $targetlist
+python3 python/GCCombo.py -a $adapdir -f $featuredir -t $targetlist
 python3 python/GCquant.py $featuredir/feature.best.sample.i.csv $batchfile $targetlist
 

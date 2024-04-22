@@ -3,6 +3,7 @@
 # os operation libraries
 import sys
 import os
+import getopt
 
 from multiprocessing import Process, Queue, Lock
 
@@ -329,12 +330,12 @@ def findADAP(dir, ADAP, depth):
 # Read metabolic features
 # Extract mz time information with label
 # Search for targets and get best match, sample by sample
-def runSample(targets, mzindex, rtindex, iindex, boundTestLimit, ADAP, samples, lock, redundancy, dtw):
+def runSample(targets, mzindex, rtindex, iindex, boundTestLimit, adapdir, ADAP, samples, lock, redundancy, dtw):
   lock.acquire()
   while not ADAP.empty():
     adap = ADAP.get()
     lock.release()
-    sample = pd.read_csv(inputdir + "/" + adap).iloc[:,[mzindex,rtindex,iindex]]
+    sample = pd.read_csv(adapdir + "/" + adap).iloc[:,[mzindex,rtindex,iindex]]
     sample.columns = ["mz","rt"]+[sample.columns[2].replace(redundancy, "")]
     # matches = targetSearch(targets, sample, 1)
     matches = targetSearch(targets, sample, boundTestLimit, dtw)
@@ -343,64 +344,94 @@ def runSample(targets, mzindex, rtindex, iindex, boundTestLimit, ADAP, samples, 
   lock.release()
   return
 
-# set the directory
-# os.chdir("/data/GCtargetted/")
-inputdir = sys.argv[1]
-outputdir = sys.argv[2]
+def main():
+  try:
+    opts, args = getopt.getopt(sys.argv[1:], "a:f:t:p:")
+  except getopt.GetoptError as err:
+    print(err)
+    sys.exit(2)
+  rawdir=None
+  adapdir=None
+  targetlist=None
+  processors=1
+  print(opts)
+  for o, a in opts:
+    if o == "-a":
+      print(a)
+      adapdir = os.path.abspath(a)
+    elif o == "-f":
+      print(a)
+      featuredir = os.path.abspath(a)
+    elif o == "-t":
+      print(a)
+      targetlist = os.path.abspath(a)
+    elif o == "-p":
+      print(a)
+      processors = int(a)
+    else:
+      print(o)
+      print(a)
+      print("unhandled option")
+      #sys.exit(2)
+  if not (adapdir and featuredir and targetlist):
+    print("missing options")
+    sys.exit(2)
 
-# Get list of ADAP feature tables
-ADAP = Queue()
-ADAP=findADAP(inputdir, ADAP, 0)
-sampleNum = ADAP.qsize()
+  # Get list of ADAP feature tables
+  ADAP = Queue()
+  ADAP=findADAP(adapdir, ADAP, 0)
+  sampleNum = ADAP.qsize()
 
-# Set variables for reading file
-# Indexes are for the sample files, not the target list
-# NOTE: we need a good way to handle multiple target list formats
-mzindex = 0
-rtindex = 1
-iindex = 3
-redundancy = ".mzXML Peak area"
+  # Set variables for reading file
+  # Indexes are for the sample files, not the target list
+  # NOTE: we need a good way to handle multiple target list formats
+  mzindex = 0
+  rtindex = 1
+  iindex = 3
+  redundancy = ".mzXML Peak area"
 
-# Set variables for processing
-boundTestLimit = 1 # this variable handles the number of times drtBound is optimized
-trtBound = 0.3
-# trt = "min" # apparently mzmine output is in minutes?
-nodes = 16
-dtw = False # parameter for whether we start with dtw
+  # Set variables for processing
+  boundTestLimit = 1 # this variable handles the number of times drtBound is optimized
+  trtBound = 0.3
+  # trt = "min" # apparently mzmine output is in minutes?
+  dtw = True # parameter for whether we start with dtw
 
-# Read target list
-# calculate deltappm range
-targets = pd.read_csv(sys.argv[3], sep=',')
-#targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid"]
-targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid","formula","concentration"]
-#targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid","formula","concentration","note","realRt"]
-targets["tmzupper"] = targets.tmz.apply(lambda x: x+x*0.000005)
-targets["tmzlower"] = targets.tmz.apply(lambda x: x-x*0.000005)
-# if trt == "min":
-#   targets.trt = targets.trt*60.0
-targets["trtupper"] = targets.trt.apply(lambda x: x+trtBound)
-targets["trtlower"] = targets.trt.apply(lambda x: x-trtBound)
+  # Read target list
+  # calculate deltappm range
+  targets = pd.read_csv(targetlist, sep=',')
+  #targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid"]
+  targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid","formula","concentration"]
+  #targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid","formula","concentration","note","realRt"]
+  targets["tmzupper"] = targets.tmz.apply(lambda x: x+x*0.000005)
+  targets["tmzlower"] = targets.tmz.apply(lambda x: x-x*0.000005)
+  # if trt == "min":
+  #   targets.trt = targets.trt*60.0
+  targets["trtupper"] = targets.trt.apply(lambda x: x+trtBound)
+  targets["trtlower"] = targets.trt.apply(lambda x: x-trtBound)
 
+  # Set up and end processes for running samples
+  samples = Queue()
+  lock = Lock()
+  for p in range(0,processors):
+    worker = Process(target = runSample, args = (targets, mzindex, rtindex, iindex, boundTestLimit, adapdir, ADAP, samples, lock, redundancy, dtw), daemon = True)
+    worker.start()
 
-# Set up and end processes for running samples
-samples = Queue()
-lock = Lock()
-for n in range(0,nodes):
-  worker = Process(target = runSample, args = (targets, mzindex, rtindex, iindex, boundTestLimit, ADAP, samples, lock, redundancy, dtw), daemon = True)
-  worker.start()
+  intensities = targets.copy()
+  rtimes = targets.copy()
+  # I recognize that the double merge is inefficient here
+  # but I'm just gonna fix it later
+  while sampleNum > 0:
+    sampleNum = sampleNum - 1
+    sample = samples.get()
+    sampleId = sample.columns[4]
+    intensities = pd.merge(intensities, sample.iloc[:,[0,1,4]],on=["id","subid"],how="left")
+    sample.drop(columns=sampleId, inplace=True)
+    sample.rename(columns={"rt":sampleId}, inplace=True)
+    rtimes = pd.merge(rtimes, sample.iloc[:,[0,1,3]],on=["id","subid"],how="left")
 
-intensities = targets.copy()
-rtimes = targets.copy()
-# I recognize that the double merge is inefficient here
-# but I'm just gonna fix it later
-while sampleNum > 0:
-  sampleNum = sampleNum - 1
-  sample = samples.get()
-  sampleId = sample.columns[4]
-  intensities = pd.merge(intensities, sample.iloc[:,[0,1,4]],on=["id","subid"],how="left")
-  sample.drop(columns=sampleId, inplace=True)
-  sample.rename(columns={"rt":sampleId}, inplace=True)
-  rtimes = pd.merge(rtimes, sample.iloc[:,[0,1,3]],on=["id","subid"],how="left")
+  intensities.fillna(0).to_csv(featuredir + "/" + "feature.nist.sample.i.csv")
+  rtimes.fillna(0).to_csv(featuredir + "/" + "feature.nist.sample.rt.csv")
 
-intensities.fillna(0).to_csv(outputdir + "/" + "feature.nist.sample.i.csv")
-rtimes.fillna(0).to_csv(outputdir + "/" + "feature.nist.sample.rt.csv")
+if __name__ == "__main__":
+  main()
+
