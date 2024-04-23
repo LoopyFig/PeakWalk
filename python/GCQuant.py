@@ -3,6 +3,7 @@
 # os operation libraries
 import sys
 import os
+import getopt
 
 from multiprocessing import Process, Queue, Lock
 
@@ -14,13 +15,27 @@ import warnings
 warnings.filterwarnings('ignore')
 from sklearn.linear_model import LinearRegression
 
+# get input options
+try:
+  opts, args = getopt.getopt(sys.argv[1:], "i:d:s:q:")
+except getopt.GetoptError as err:
+  print(err)
+  sys.exit(2)
+intensities = None
+dilutions = None
+stdlib = None
+quantifications = None
+for o, a in opts:
+  if o == "-i":
+    print(a)
+    intensities = pd.read_csv(os.path.abspath(a), sep=",")
+  if o == "-d":
+    dilutions = pd.read_csv(os.path.abspath(a), sep=",")
+  if o == "-s":
+    stdlib = a
+  if o == "-q":
+    quantifications = os.path.abspath(a)
 
-# get intensities and dilutions
-# get dilution library of interest
-intensities = pd.read_csv(sys.argv[1],sep=",")
-dilutions = pd.read_csv(sys.argv[2],sep=",")
-stdlib = sys.argv[3]
-sindex = 11
 
 # set up transposed dataframe for looping regression
 subjects = dilutions["sample"][(dilutions.type == "subject")].sort_values().tolist()
@@ -42,7 +57,6 @@ ii = 0
 for i in dilutionIntensities:
   fragment = dilutionIntensities[[i]]
   fragment["concentration"] = concentrations
-  # print(fragment)
   fragment = fragment[(fragment[i] > 0)]
   dsamp.append(len(fragment.index))
   dconc.append(len(fragment.concentration.unique()))
@@ -66,13 +80,13 @@ for i in dilutionIntensities:
   ii = ii + 1
 
 sampleIntensities = sampleIntensities.transpose()
-quant = intensities.iloc[:,1:15]
+quant = intensities.iloc[:,1:14]
 quant["dsamp"] = dsamp
 quant["dconc"] = dconc
 quant["beta"] = beta
 quant["rsquared"] = rsquared
 
 quant = pd.concat([quant, sampleIntensities], axis = 1)
-quant.to_csv(sys.argv[4])
+quant.to_csv(quantifications)
 
 

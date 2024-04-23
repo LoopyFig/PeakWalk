@@ -1,35 +1,73 @@
 #!/bin/bash
 
-while getopts ":hrtoafbp" option; do
-	case $option in
-		h)
-			echo "-h Get Program Description"
-			exit;;
-		r)
-			$rawdir = $OPTARG;;
-		t)
-			$targetlist = $OPTARG;;
-		o)
-			$outputdir = $OPTARG
-			$adapdir = $OPTARG/adap/
-			$featuredir = $OPTARG/feature/
-			mkdir -p $outputdir;;
-		a)
-			$adapdir = $OPTARG;;
-		f)
-			$featuredir = $OPTARG;;
-		b)
-			$batchfile = $OPTARG;;
-		p)
-			$processors = $OPTARG;;
-	esac
+processors="1"
+adapdir="./adap"
+featuredir="./feature"
+
+while getopts "hr::x::t::o::a::f::b::s::p::" option; do
+  case $option in
+    h)
+      echo "-h Get Program Description"
+      echo "-r raw directory, triggers raw processing"
+      echo "-x mzxml directory, triggers mzxml processing"
+      echo "  do not use -r and -x at the same time"
+      echo "-t target list file"
+      echo "-o convenient option for output directory"
+      echo "  creates adap and feature subdirectories"
+      echo "  do not use with -a or -f"
+      echo "-a sets and creates adap directory"
+      echo "  by default set to ./adap"
+      echo "-f sets and creates feature directory"
+      echo "  by default set to ./feature"
+      echo "-b batch file for quantification"
+      echo "  requires information on dilutions and standards"
+      echo "-s specifies with standard library files to use in batch file"
+      echo "-p number of parallel processors to use for processing"
+      exit;;
+    r)
+      rawdir=$OPTARG;;
+    x)
+      mzxmldir=$OPTARG;;
+    t)
+      targetlist=$OPTARG;;
+    o)
+      adapdir=$OPTARG/adap/
+      featuredir=$OPTARG/feature/
+      mkdir -p $outputdir;;
+    a)
+      adapdir=$OPTARG;;
+    f)
+      featuredir=$OPTARG;;
+    b)
+      batchfile=$OPTARG;;
+    s)
+      stdlib=$OPTARG;;
+    p)
+      processors=$OPTARG;;
+  esac
 done
 
-mkdir -p $adapdir
-mkdir -p $featuredir
+if [[ ! -z "$rawdir" ]]; then
+  $PEAK_WALK/bash/runmsconvert.sh -r $rawdir -p $processors
+  rawdir=$rawdir"/mzxml"
+fi
 
-python3 python/adapGC.py -r $rawdir -a $adapdir
-bash bash/runmzmine.sh $adapdir $processors
-python3 python/GCCombo.py -a $adapdir -f $featuredir -t $targetlist
-python3 python/GCquant.py $featuredir/feature.best.sample.i.csv $batchfile $targetlist
+if [[ ! -z "$mzxmldir" ]]; then
+  rawdir=$mzxmldir
+fi
+
+if [[ ! -z "$rawdir"]]; then
+  mkdir -p $adapdir
+  python3 $PEAK_WALK/python/adapGC.py -r $rawdir -a $adapdir
+  bash $PEAK_WALK/bash/runmzmine.sh -a adapdir -p processors
+fi
+
+if [[ -z "$targetlist" ]]; then
+  mkdir -p $featuredir
+  python3 python/GCCombo.py -a $adapdir -f $featuredir -t $targetlist -p $processors
+fi
+
+if [[ ! -z "$batchfile" ]] && [[-z "$stdlib" ]]; then
+  python3 python/GCquant.py -i $featuredir"/feature.sample.i.csv" -d $batchfile -s $stdlib -q $featuredir"/feature.sample.quant.csv"
+fi
 
