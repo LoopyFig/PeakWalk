@@ -429,8 +429,8 @@ def main():
     sample.rename(columns={"rt":sampleId}, inplace=True)
     rtimes = pd.merge(rtimes, sample.iloc[:,[0,1,3]],on=["id","subid"],how="left")
 
-  intensities.fillna(0).to_csv(featuredir + "/" + "feature.nist.sample.i.csv")
-  rtimes.fillna(0).to_csv(featuredir + "/" + "feature.nist.sample.rt.csv")
+  intensities.fillna(0).to_csv(featuredir + "/" + "feature.sample.i.csv")
+  rtimes.fillna(0).to_csv(featuredir + "/" + "feature.sample.rt.csv")
 
 if __name__ == "__main__":
   main()
