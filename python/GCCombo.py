@@ -418,7 +418,8 @@ def main():
 
   intensities = targets.copy()
   rtimes = targets.copy()
-  # I recognize that the double merge is inefficient here
+  masscharges = targets.copy()
+  # I recognize that the triple merge is inefficient here
   # but I'm just gonna fix it later
   while sampleNum > 0:
     sampleNum = sampleNum - 1
@@ -428,9 +429,13 @@ def main():
     sample.drop(columns=sampleId, inplace=True)
     sample.rename(columns={"rt":sampleId}, inplace=True)
     rtimes = pd.merge(rtimes, sample.iloc[:,[0,1,3]],on=["id","subid"],how="left")
+    sample.drop(columns=sampleId, inplace=True)
+    sample.rename(columns={"mz":sampleId}, inplace=True)
+    masscharges = pd.merge(masscharges, sample.iloc[:,[0,1,2]],on=["id","subid"],how="left")
 
   intensities.fillna(0).to_csv(featuredir + "/" + "feature.sample.i.csv")
   rtimes.fillna(0).to_csv(featuredir + "/" + "feature.sample.rt.csv")
+  masscharges.fillna(0).to_csv(featuredir + "/" + "feature.sample.mz.csv")
 
 if __name__ == "__main__":
   main()

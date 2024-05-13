@@ -68,11 +68,12 @@ fi
 if [[ ! -z "$targetlist" ]]; then
   mkdir -p $featuredir
   echo "starting targetted search"
-  python3 python/GCCombo.py -a $adapdir -f $featuredir -t $targetlist -p $processors
+  python3 $PEAK_WALK/python/GCCombo.py -a $adapdir -f $featuredir -t $targetlist -p $processors
+  python3 $PEAK_WALK/python/GCSummary.py -i $featuredir"/feature.sample.i.csv" -r $featuredir"/feature.sample.rt.csv" -m $featuredir"/feature.sample.mz.csv" -s $featuredir"/feature.sample.summary.csv"
 fi
 
-if [[ ! -z "$batchfile" ]] && [[ -z "$stdlib" ]]; then
+if [[ ! -z "$batchfile" ]] && [[ ! -z "$stdlib" ]]; then
   echo "performing quantification"
-  python3 python/GCquant.py -i $featuredir"/feature.sample.i.csv" -d $batchfile -s $stdlib -q $featuredir"/feature.sample.quant.csv"
+  python3 $PEAK_WALK/python/GCQuant.py -i $featuredir"/feature.sample.i.csv" -d $batchfile -s $stdlib -q $featuredir"/feature.sample.quant.csv"
 fi
 
