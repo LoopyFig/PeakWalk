@@ -69,7 +69,9 @@ if [[ ! -z "$targetlist" ]]; then
   mkdir -p $featuredir
   echo "starting targetted search"
   python3 $PEAK_WALK/python/GCCombo.py -a $adapdir -f $featuredir -t $targetlist -p $processors
-  python3 $PEAK_WALK/python/GCSummary.py -i $featuredir"/feature.sample.i.csv" -r $featuredir"/feature.sample.rt.csv" -m $featuredir"/feature.sample.mz.csv" -s $featuredir"/feature.sample.summary.csv"
+  python3 $PEAK_WALK/python/GCSummary.py -i $featuredir"/feature.sample.i.csv" -r $featuredir"/feature.sample.rt.csv" -m $featuredir"/feature.sample.mz.csv" -n $featuredir"/feature.sample.summary.csv"
+  if [[ ! -z "$batchfile" ]]; then
+    python3 $PEAK_WALK/python/GCSummary.py -i $featuredir"/feature.sample.i.csv" -r $featuredir"/feature.sample.rt.csv" -m $featuredir"/feature.sample.mz.csv" -n $featuredir"/feature.subject.summary.csv" -b $batchfile -x
 fi
 
 if [[ ! -z "$batchfile" ]] && [[ ! -z "$stdlib" ]]; then
