@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 
 # get input options
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "i:r:m:n:b:l:s:x")
+  opts, args = getopt.getopt(sys.argv[1:], "i:r:m:n:b:l:s:xh")
 except getopt.GetoptError as err:
   print(err)
   sys.exit(2)
@@ -31,6 +31,18 @@ labels = ["subject"] # sample type filter
 stdlib = None # standards library
 hasrep = False # toggles replicate summarization
 for o, a in opts:
+  if o == "-h":
+    print("PeakWalk: Automated GC Identification and Quantification")
+    print("-i intensity file, required")
+    print("-r retention time file, required")
+    print("-m masscharge file, required")
+    print("-n summary file name, required")
+    print("-b batch file, optional")
+    print("-l filter labels, optional, comma-separated, requires -b")
+    print("-s standards library, optional, function not implemented")
+    print("-x toggle replicate summarization, optional, requires -b")
+    print("-h help, optional")
+    sys.exit()
   if o == "-i":
     print(a)
     intensities = pd.read_csv(os.path.abspath(a), sep=",")
