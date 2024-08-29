@@ -64,8 +64,8 @@ for o, a in opts:
 # get list of samples based on input
 samples = []
 sources = []
-stdsamples = []
-stdsources = []
+libsamples = []
+libsources = []
 if batchinfo is not None and labels:
   # get samples and sources for selected sample types
   for label in labels:
@@ -74,15 +74,15 @@ if batchinfo is not None and labels:
       sources = sources + batchinfo[batchinfo["type"] == label]["id"].unique().tolist()
   # get samples and sources for standard library
   if stdlib:
-    stdsamples = batchinfo[batchinfo["type"] == stdlib]["sample"].tolist()
+    libsamples = batchinfo[batchinfo["type"] == stdlib]["sample"].tolist()
     if hasrep:
-      stdsources = batchinfo[batchinfo["type"] == stdlib]["id"].unique().tolist()
+      libsources = batchinfo[batchinfo["type"] == stdlib]["id"].unique().tolist()
 else:
   samples = intensities.columns[14:].tolist()
   samples.sort()
 
 # create initial fragment summaries
-summaries = intensities[["tmz", "id", "subid", "name", "monoisotopic", "cas", "formula"]]
+summaries = masscharges[["tmz", "id", "subid", "name", "monoisotopic", "cas", "formula"]]
 
 # summarize rtimes
 rtimes = rtimes[samples]
@@ -112,6 +112,32 @@ summaries["mzMin"] = masscharges.min(axis=1)
 summaries["mzMax"] = masscharges.max(axis=1)
 summaries["mzRange"] = summaries["mzMax"].sub(summaries["mzMin"])
 
+# summarize standards if library provided
+if libsamples:
+  libintensities = intensities[libsamples]
+  libintensities[libintensities == 0] = np.nan
+  if hasrep:
+    replicates = pd.DataFrame()
+    for source in libsources:
+      replicates[source] = libintensities[batchinfo[batchinfo["id"] == source]["sample"]].median(axis=1)
+    libintensities = replicates
+  # basic info on detection in the standard
+  summaries["libDetectCnt"] = libintensities.count(axis=1)
+  summaries["libDetectFrac"] = summaries["libDetectCnt"].div(len(libintensities.columns))
+  # more complex info about quality in the standard
+  ids = summaries[(summaries["libDetectCnt"] > 0)]["id"].drop_duplicates()
+  summaries["libFragCnt"] = 0
+  summaries["libQualityCnt"] = 0
+  for i in ids:
+    # get the number of detected fragments per id in std
+    # get number of quality detections per id in std
+    #   a quality detection is defined as 3 detected fragments in one sample
+    frags = summaries.index[(summaries["id"] == i) & (summaries["libDetectCnt"] > 0)].tolist()
+    summaries.loc[frags, "libFragCnt"] = len(frags)
+    simulCnt = libintensities.loc[frags].count(axis=0)
+    summaries.loc[frags, "libQualityCnt"] = (simulCnt >= 3).sum()
+  summaries["libQualityFrac"] = summaries["libQualityCnt"].div(len(libintensities.columns))
+
 # summarize intensities
 intensities = intensities[samples]
 intensities[intensities == 0] = np.nan
@@ -127,8 +153,8 @@ summaries["iCV"] = summaries["iStd"].div(summaries["iMean"])
 summaries["detectCnt"] = intensities.count(axis=1)
 summaries["detectFrac"] = summaries["detectCnt"].div(len(intensities.columns))
 
-# identification quality
-ids = summaries["id"].drop_duplicates()
+# identification quality and best fragment identification
+ids = summaries[(summaries["detectCnt"] > 0)]["id"].drop_duplicates()
 summaries["fragCnt"] = 0
 summaries["qualityCnt"] = 0
 summaries["bestFlag"] = 0
@@ -136,7 +162,7 @@ for i in ids:
   # get the number of detected fragments per id
   # get number of quality detections per id
   #   a quality detection is defined as 3 detected fragments in one sample
-  frags = summaries.index[(summaries["id"] == i)].tolist()
+  frags = summaries.index[(summaries["id"] == i) & (summaries["detectCnt"] > 0)].tolist()
   summaries.loc[frags, "fragCnt"] = len(frags)
   simulCnt = intensities.loc[frags].count(axis=0)
   summaries.loc[frags, "qualityCnt"] = (simulCnt >= 3).sum()
@@ -147,8 +173,13 @@ for i in ids:
   summaries.loc[(summaries["id"] == i) & (summaries["detectCnt"] == detectCntMax) & (summaries["subid"] == subidMin), "bestFlag"] = 1
 summaries["qualityFrac"] = summaries["qualityCnt"].div(len(intensities.columns))
 
-# rearrange columns, add back intensities to summary
-summaries = summaries[["mzMed", "rtMed", "tmz", "id", "subid", "name", "monoisotopic", "formula", "mzMin", "mzMax", "mzRange", "rtMin", "rtMax", "rtRange", "iMean", "iStd", "iCV", "detectCnt", "detectFrac", "fragCnt", "qualityCnt", "qualityFrac", "bestFlag"]]
+# select and rearrange columns based on selected inputs
+# add back intensities to summary
+summaryFields = ["mzMed", "rtMed", "tmz", "id", "subid", "name", "monoisotopic", "formula", "cas", "mzMin", "mzMax", "mzRange", "rtMin", "rtMax", "rtRange", "iMean", "iStd", "iCV"]
+if libsamples:
+  summaryFields = summaryFields + ["libFragCnt", "libQualityFrac"]
+summaryFields = summaryFields + ["detectCnt", "detectFrac", "fragCnt", "qualityCnt", "qualityFrac", "bestFlag"]
+summaries = summaries[summaryFields]
 summaries = pd.concat([summaries, intensities], axis=1)
 
 # filter rows
