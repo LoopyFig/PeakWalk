@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 
 # get input options
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "i:r:m:n:b:l:s:xh")
+  opts, args = getopt.getopt(sys.argv[1:], "i:r:m:q:n:b:l:s:xh")
 except getopt.GetoptError as err:
   print(err)
   sys.exit(2)
@@ -24,6 +24,7 @@ except getopt.GetoptError as err:
 intensities = None
 rtimes = None
 masscharges = None
+quants = None
 summaryname = None
 # additional parameters
 batchinfo = None # batch file
@@ -36,6 +37,7 @@ for o, a in opts:
     print("-i intensity file, required")
     print("-r retention time file, required")
     print("-m masscharge file, required")
+    print("-q quantification file, optional, overrides intensity with concentration, requires -b")
     print("-n summary file name, required")
     print("-b batch file, optional")
     print("-l filter labels, optional, comma-separated, requires -b")
@@ -50,6 +52,8 @@ for o, a in opts:
     rtimes = pd.read_csv(os.path.abspath(a), sep=",")
   if o == "-m":
     masscharges = pd.read_csv(os.path.abspath(a), sep=",")
+  if o == "-q":
+    quants = pd.read_csv(os.path.abspath(a), sep=",")
   if o == "-n":
     summaryname = os.path.abspath(a)
   if o == "-b":
@@ -173,14 +177,32 @@ for i in ids:
   summaries.loc[(summaries["id"] == i) & (summaries["detectCnt"] == detectCntMax) & (summaries["subid"] == subidMin), "bestFlag"] = 1
 summaries["qualityFrac"] = summaries["qualityCnt"].div(len(intensities.columns))
 
+# if concentration is provided add associated details
+if quants is not None:
+  summaries["beta"] = quants["beta"]
+  quants = quants[samples]
+  quants[quants == 0] = np.nan
+  if hasrep:
+    # get medians for replicates
+    replicates = pd.DataFrame()
+    for source in sources:
+      replicates[source] = quants[batchinfo[batchinfo["id"] == source]["sample"]].median(axis=1)
+    quants = replicates
+
 # select and rearrange columns based on selected inputs
-# add back intensities to summary
 summaryFields = ["mzMed", "rtMed", "tmz", "id", "subid", "name", "monoisotopic", "formula", "cas", "mzMin", "mzMax", "mzRange", "rtMin", "rtMax", "rtRange", "iMean", "iStd", "iCV"]
 if libsamples:
   summaryFields = summaryFields + ["libFragCnt", "libQualityFrac"]
 summaryFields = summaryFields + ["detectCnt", "detectFrac", "fragCnt", "qualityCnt", "qualityFrac", "bestFlag"]
+if quants is not None:
+  summaryFields = summaryFields + ["beta"]
 summaries = summaries[summaryFields]
-summaries = pd.concat([summaries, intensities], axis=1)
+
+# add intensities or concentrations to summary
+if quants is None:
+  summaries = pd.concat([summaries, intensities], axis=1)
+else:
+  summaries = pd.concat([summaries, quants], axis=1)
 
 # filter rows
 summaries = summaries[summaries["detectCnt"] > 0]
