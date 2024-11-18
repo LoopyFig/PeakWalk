@@ -88,7 +88,7 @@ def irtFilter(ids, idSubids, mzRts):
   # that this is always best practice. a slightly more sophisticated method would
   # look for a "better median" rather than a low one, so we'll try that later
   irts = pd.merge(idSubids[idSubids.mzRt != -1], mzRts[mzRts.idSubid != -1],
-    on=["idSubid","mzRt"]).groupby("id")["rt"].apply(lambda x: x.sort_values().iat[int(len(x)/2)-1])
+    on=["idSubid","mzRt"]).groupby("id")["rt"].apply(lambda x: x.sort_values().iat[int(len(x)/2 + len(x)%2)-1])
   irts.name = "irt"
   ids = pd.merge(ids, irts, on="id", how="left")
   idSubids = pd.merge(idSubids, ids, on="id")
@@ -255,7 +255,7 @@ def targetSearch(targets, sample, boundTestLimit = np.inf, dtw = True):
   # Concatenate matches and sort by rt, irt, id, subid
   # Get unique dataframe of matched mzRts and unique list of idSubids
   matches = pd.concat(matches, axis=0).sort_values(["rt","trt","id","subid"])
-  print(sample.columns[2], " initial matches: ", str(len(matches)))
+  # print(sample.columns[2], " initial matches: ", str(len(matches)))
   mzRts = matches[["mz","rt"]].drop_duplicates()
   idSubids = matches[["id","subid","trt"]].drop_duplicates()
 
@@ -289,7 +289,7 @@ def targetSearch(targets, sample, boundTestLimit = np.inf, dtw = True):
   drtBound = drtHypothesis = drtBoundLimit = 0
   boundTest = 0
   while True:
-    print(sample.columns[2] + " matchCount: " + str(matchCount) + " drtBound: " + str(drtBound) + " ids: " + str(len(idSubids.index)))
+    # print(sample.columns[2] + " matchCount: " + str(matchCount) + " drtBound: " + str(drtBound) + " ids: " + str(len(idSubids.index)))
     if boundTest == boundTestLimit:
       matches, ids, idSubids, mzRts, drtBound, drtHypothesis = firstShot(matches, ids, idSubids, mzRts, drtBoundLimit)
     else:
@@ -304,15 +304,15 @@ def targetSearch(targets, sample, boundTestLimit = np.inf, dtw = True):
     matchState = newState
     matchCount = newCount
 
-  print("drtBound: " + str(drtBound))
+  # print("drtBound: " + str(drtBound))
 
   # Second shot matching
   matches, ids, idSubids, mzRts, drtHypothesis = secondShot(matches, ids, idSubids, mzRts, drtBound)
-  print("drtHypothesis Two: " + str(drtHypothesis))
+  # print("drtHypothesis Two: " + str(drtHypothesis))
 
   # Merge onto the original matches to filter final selection
   matches = pd.merge(matches, idSubids[["idSubid","mzRt","irt","drt"]], on=["idSubid","mzRt"], how="inner")
-  print(sample.columns[2], " done\n")
+  # print(sample.columns[2], " done\n")
   return matches[["id","subid","mz","rt",sample.columns[2],"tmz","trt","irt","drt"]]
 
 # Search directory for ADAP files
@@ -327,18 +327,42 @@ def findADAP(dir, ADAP, depth):
       ADAP = findADAP(elementpath, ADAP, depth+1)
   return ADAP
 
+# Estimate overall shift of list
+def shiftRt(targets, matches, trtSmallBound):
+  ids = matches["id"].unique()
+  shifts = []
+  rtShift= 0
+  for id in ids:
+    rts = matches.loc[matches["id"] == id, ["rt","trt"]]
+    if len(rts) >= 3:
+      shifts = shifts + rts["rt"].sub(rts["trt"]).tolist()
+  if len(shifts) > 0:
+    rtShift = pd.Series(shifts).median()
+    targets["trtupper"] = targets.trt.apply(lambda x: x+trtSmallBound+rtShift)
+    targets["trtlower"] = targets.trt.apply(lambda x: x-trtSmallBound+rtShift)
+  return [targets, rtShift]
+
 # Read metabolic features
 # Extract mz time information with label
 # Search for targets and get best match, sample by sample
-def runSample(targets, mzindex, rtindex, iindex, boundTestLimit, adapdir, ADAP, samples, lock, redundancy, dtw):
+def runSample(targets, mzindex, rtindex, iindex, boundTestLimit, adapdir, ADAP, samples, lock, redundancy, dtw, shift, trtSmallBound):
   lock.acquire()
+  if shift:
+    ortBounds = targets[["trtupper", "trtlower"]].copy()
   while not ADAP.empty():
     adap = ADAP.get()
     lock.release()
     sample = pd.read_csv(adapdir + "/" + adap).iloc[:,[mzindex,rtindex,iindex]]
     sample.columns = ["mz","rt"]+[sample.columns[2].replace(redundancy, "")]
     # matches = targetSearch(targets, sample, 1)
-    matches = targetSearch(targets, sample, boundTestLimit, dtw)
+    if shift:
+      matches = targetSearch(targets, sample, boundTestLimit, dtw)
+      targets, rtShift = shiftRt(targets, matches, trtSmallBound)
+      print(adap + " " + str(rtShift))
+      matches = targetSearch(targets, sample, boundTestLimit, dtw)
+      targets[["trtupper","trtlower"]] = ortBounds[["trtupper", "trtlower"]]
+    else:
+      matches = targetSearch(targets, sample, boundTestLimit, dtw)
     samples.put(matches)
     lock.acquire()
   lock.release()
@@ -393,7 +417,9 @@ def main():
   # Set variables for processing
   boundTestLimit = 1 # this variable handles the number of times drtBound is optimized
   trtBound = 0.3
-  # trt = "min" # apparently mzmine output is in minutes?
+  trtSmallBound = 0.3
+  # trt = "min" # apparently mzmine output is in minutes
+  shift = True # parameter for whether we apply an automatic list shift
   dtw = True # parameter for whether we start with dtw
 
   # Read target list
@@ -402,8 +428,8 @@ def main():
   #targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid"]
   targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid","formula","concentration"]
   #targets.columns=["id","name","tmz","trt","monoisotopic","cas","subid","formula","concentration","note","realRt"]
-  targets["tmzupper"] = targets.tmz.apply(lambda x: x+x*0.000005)
-  targets["tmzlower"] = targets.tmz.apply(lambda x: x-x*0.000005)
+  targets["tmzupper"] = targets.tmz.apply(lambda x: x+x*0.000006)
+  targets["tmzlower"] = targets.tmz.apply(lambda x: x-x*0.000006)
   # if trt == "min":
   #   targets.trt = targets.trt*60.0
   targets["trtupper"] = targets.trt.apply(lambda x: x+trtBound)
@@ -413,7 +439,7 @@ def main():
   samples = Queue()
   lock = Lock()
   for p in range(0,processors):
-    worker = Process(target = runSample, args = (targets, mzindex, rtindex, iindex, boundTestLimit, adapdir, ADAP, samples, lock, redundancy, dtw), daemon = True)
+    worker = Process(target = runSample, args = (targets, mzindex, rtindex, iindex, boundTestLimit, adapdir, ADAP, samples, lock, redundancy, dtw, shift, trtSmallBound), daemon = True)
     worker.start()
 
   intensities = targets.copy()

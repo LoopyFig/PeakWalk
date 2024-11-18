@@ -1,5 +1,5 @@
 import pandas as pd
-batch = pd.read_csv("GC093_M512_Marts.csv")
+batch = pd.read_csv("GC089.csv")
 batch = batch[["Filename","Sample.ID","Batch"]]
 batch.columns = ["sample","id","batch"]
 batch["id"] = batch["id"].str.replace(r'_[0-9]+$','',regex = True)

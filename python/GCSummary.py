@@ -16,46 +16,64 @@ warnings.filterwarnings('ignore')
 
 # get input options
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "i:r:m:q:n:b:l:s:xh")
+  opts, args = getopt.getopt(sys.argv[1:], "f:i:r:m:q:n:b:l:s:xh", ["quant"])
 except getopt.GetoptError as err:
   print(err)
   sys.exit(2)
 # required parameters
-intensities = None
-rtimes = None
-masscharges = None
-quants = None
-summaryname = None
+featuresLoc = ""
+intensitiesLoc = "feature.sample.i.csv"
+rtimesLoc = "feature.sample.rt.csv"
+masschargesLoc = "feature.sample.mz.csv"
+quantsLoc = "feature.sample.quant.csv"
+summaryname = [
+  "feature.sample.summary.csv","feature.subject.summary.csv",
+  "feature.sample.qsummary.csv","feature.subject.qsummary.csv"
+  ] # summary file naming options based on input
+defaultnameToggle = True
 # additional parameters
 batchinfo = None # batch file
 labels = ["subject"] # sample type filter
 stdlib = None # standards library
-hasrep = False # toggles replicate summarization
+repToggle = False # toggles replicate summarization
+quantToggle = False # toggles quantification options
 for o, a in opts:
   if o == "-h":
     print("PeakWalk: Automated GC Identification and Quantification")
-    print("-i intensity file, required")
-    print("-r retention time file, required")
-    print("-m masscharge file, required")
-    print("-q quantification file, optional, overrides intensity with concentration, requires -b")
-    print("-n summary file name, required")
+    print("-f feature files location, optional")
+    print("  default feature files location is working directory")
+    print("  sets location for input and output")
+    print("-i intensity file, optional")
+    print("-r retention time file, optional")
+    print("-m masscharge file, optional")
+    print("  -irm are optional, but feature files are required, see -f")
+    print("  default file names are feature.sample.{i, mz, rt}.csv")
+    print("-q quantification file, optional, requires -b")
+    print("  overrides intensity with concentration")
+    print("-n summary file name, optional")
     print("-b batch file, optional")
     print("-l filter labels, optional, comma-separated, requires -b")
     print("-s standards library, optional, function not implemented")
     print("-x toggle replicate summarization, optional, requires -b")
     print("-h help, optional")
     sys.exit()
+  if o == "-f":
+    featuresLoc = a + "/"
   if o == "-i":
     print(a)
-    intensities = pd.read_csv(os.path.abspath(a), sep=",")
+    intensitiesLoc = a
   if o == "-r":
-    rtimes = pd.read_csv(os.path.abspath(a), sep=",")
+    rtimesLoc = a
   if o == "-m":
-    masscharges = pd.read_csv(os.path.abspath(a), sep=",")
+    masschargesLoc = a
   if o == "-q":
-    quants = pd.read_csv(os.path.abspath(a), sep=",")
+    quantToggle = True
+    quantsLoc = a
+  if o == "--quant":
+    quantToggle = True
   if o == "-n":
-    summaryname = os.path.abspath(a)
+    defaultnameToggle = False
+    summaryname = a
   if o == "-b":
     batchinfo = pd.read_csv(os.path.abspath(a), sep=",")
   if o == "-l":
@@ -63,7 +81,27 @@ for o, a in opts:
   if o == "-s":
     stdlib = a
   if o == "-x":
-    hasrep = True
+    repToggle = True
+
+# read in data based on input
+intensities = pd.read_csv(os.path.abspath(featuresLoc + intensitiesLoc), sep=",")
+rtimes = pd.read_csv(os.path.abspath(featuresLoc + rtimesLoc), sep=",")
+masscharges = pd.read_csv(os.path.abspath(featuresLoc + masschargesLoc), sep=",")
+quants = None
+if quantToggle:
+  quants = pd.read_csv(os.path.abspath(featuresLoc + quantsLoc), sep=",")
+if defaultnameToggle:
+  if quantToggle:
+    if repToggle:
+      summaryname = summaryname[3]
+    else:
+      summaryname = summaryname[2]
+  else:
+    if repToggle:
+      summaryname = summaryname[1]
+    else:
+      summaryname = summaryname[0]
+summaryname = featuresLoc + summaryname
 
 # get list of samples based on input
 samples = []
@@ -74,24 +112,24 @@ if batchinfo is not None and labels:
   # get samples and sources for selected sample types
   for label in labels:
     samples = samples + batchinfo[batchinfo["type"] == label]["sample"].tolist()
-    if hasrep:
+    if repToggle:
       sources = sources + batchinfo[batchinfo["type"] == label]["id"].unique().tolist()
   # get samples and sources for standard library
   if stdlib:
     libsamples = batchinfo[batchinfo["type"] == stdlib]["sample"].tolist()
-    if hasrep:
+    if repToggle:
       libsources = batchinfo[batchinfo["type"] == stdlib]["id"].unique().tolist()
 else:
   samples = intensities.columns[14:].tolist()
   samples.sort()
 
 # create initial fragment summaries
-summaries = masscharges[["tmz", "id", "subid", "name", "monoisotopic", "cas", "formula"]]
+summaries = masscharges[["tmz", "trt", "id", "subid", "name", "monoisotopic", "cas", "formula"]]
 
 # summarize rtimes
 rtimes = rtimes[samples]
 rtimes[rtimes == 0] = np.nan
-if hasrep:
+if repToggle:
   # get medians for replicates
   replicates = pd.DataFrame()
   for source in sources:
@@ -105,7 +143,7 @@ summaries["rtRange"] = summaries["rtMax"].sub(summaries["rtMin"])
 # summarize masses
 masscharges = masscharges[samples]
 masscharges[masscharges == 0] = np.nan
-if hasrep:
+if repToggle:
   # get medians for replicates
   replicates = pd.DataFrame()
   for source in sources:
@@ -120,7 +158,7 @@ summaries["mzRange"] = summaries["mzMax"].sub(summaries["mzMin"])
 if libsamples:
   libintensities = intensities[libsamples]
   libintensities[libintensities == 0] = np.nan
-  if hasrep:
+  if repToggle:
     replicates = pd.DataFrame()
     for source in libsources:
       replicates[source] = libintensities[batchinfo[batchinfo["id"] == source]["sample"]].median(axis=1)
@@ -145,7 +183,7 @@ if libsamples:
 # summarize intensities
 intensities = intensities[samples]
 intensities[intensities == 0] = np.nan
-if hasrep:
+if repToggle:
   # get medians for replicates
   replicates = pd.DataFrame()
   for source in sources:
@@ -174,35 +212,44 @@ for i in ids:
   #   in the future alternative metrics like CV might be considered
   detectCntMax = summaries.loc[frags]["detectCnt"].max()
   subidMin = summaries.loc[(summaries["id"] == i) & (summaries["detectCnt"] == detectCntMax), "subid"].min()
-  summaries.loc[(summaries["id"] == i) & (summaries["detectCnt"] == detectCntMax) & (summaries["subid"] == subidMin), "bestFlag"] = 1
+  summaries.loc[(summaries["id"] == i) & (summaries["subid"] == subidMin), "bestFlag"] = 1
 summaries["qualityFrac"] = summaries["qualityCnt"].div(len(intensities.columns))
 
 # if concentration is provided add associated details
-if quants is not None:
+if quantToggle:
   summaries["beta"] = quants["beta"]
   quants = quants[samples]
   quants[quants == 0] = np.nan
-  if hasrep:
+  if repToggle:
     # get medians for replicates
     replicates = pd.DataFrame()
     for source in sources:
       replicates[source] = quants[batchinfo[batchinfo["id"] == source]["sample"]].median(axis=1)
     quants = replicates
+  # identify the best fragment for quantification via detected count and subid and presence of standards
+  ids = summaries[(summaries["detectCnt"] > 0) & (summaries["beta"] > 0)]["id"].drop_duplicates()
+  summaries["bestQuantFlag"] = 0
+  for i in ids:
+    frags = summaries.index[(summaries["id"] == i) & (summaries["detectCnt"] > 0) & (summaries["beta"] > 0)].tolist()
+    detectCntMax = summaries.loc[frags]["detectCnt"].max()
+    subidMin = summaries.loc[(summaries["id"] == i) & (summaries["detectCnt"] == detectCntMax) & (summaries["beta"] > 0), "subid"].min()
+    summaries.loc[(summaries["id"] == i) & (summaries["subid"] == subidMin), "bestQuantFlag"] = 1
 
 # select and rearrange columns based on selected inputs
-summaryFields = ["mzMed", "rtMed", "tmz", "id", "subid", "name", "monoisotopic", "formula", "cas", "mzMin", "mzMax", "mzRange", "rtMin", "rtMax", "rtRange", "iMean", "iStd", "iCV"]
+summaryFields = ["mzMed", "rtMed", "tmz", "trt", "id", "subid", "name", "monoisotopic", "formula", "cas", "mzMin", "mzMax", "mzRange", "rtMin", "rtMax", "rtRange", "iMean", "iStd", "iCV"]
 if libsamples:
   summaryFields = summaryFields + ["libFragCnt", "libQualityFrac"]
 summaryFields = summaryFields + ["detectCnt", "detectFrac", "fragCnt", "qualityCnt", "qualityFrac", "bestFlag"]
-if quants is not None:
-  summaryFields = summaryFields + ["beta"]
+if quantToggle:
+  summaryFields = summaryFields + ["beta", "bestQuantFlag"]
 summaries = summaries[summaryFields]
 
 # add intensities or concentrations to summary
-if quants is None:
+if not quantToggle:
   summaries = pd.concat([summaries, intensities], axis=1)
 else:
   summaries = pd.concat([summaries, quants], axis=1)
+  summaries = summaries[summaries["beta"] > 0]
 
 # filter rows
 summaries = summaries[summaries["detectCnt"] > 0]
