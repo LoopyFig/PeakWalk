@@ -4,7 +4,7 @@ processors="1"
 adapdir="./adap"
 featuredir="./feature"
 
-while getopts "hr::x::t::o::a::f::b::s::p::" option; do
+while getopts "hr::x::t::o::a::f::b::s::p::c::" option; do
   case $option in
     h)
       echo "-h Get Program Description"
@@ -23,6 +23,8 @@ while getopts "hr::x::t::o::a::f::b::s::p::" option; do
       echo "  requires information on dilutions and standards"
       echo "-s specifies with standard library files to use in batch file"
       echo "-p number of parallel processors to use for processing"
+      echo "-c specifies a correlation threshold for additional summary"
+      echo "  requires replicate summary to be active"
       exit;;
     r)
       rawdir=$OPTARG;;
@@ -44,6 +46,8 @@ while getopts "hr::x::t::o::a::f::b::s::p::" option; do
       stdlib=$OPTARG;;
     p)
       processors=$OPTARG;;
+    c)
+      correlation=$OPTARG;;
   esac
 done
 
@@ -72,6 +76,9 @@ if [[ ! -z "$targetlist" ]]; then
   python3 $PEAK_WALK/python/GCSummary.py -f $featuredir
   if [[ ! -z "$batchfile" ]] && [[ ! -z "$stdlib" ]]; then
     python3 $PEAK_WALK/python/GCSummary.py -f $featuredir -b $batchfile -s $stdlib -x
+    if [[ ! -z "$correlation" ]]; then
+      python3 $PEAK_WALK/python/GCSummary.py -f $featuredir -b $batchfile -s $stdlib -x -c $correlation -n feature.subject.summary.corr.csv
+    fi
   fi
 fi
 
@@ -79,5 +86,8 @@ if [[ ! -z "$batchfile" ]] && [[ ! -z "$stdlib" ]]; then
   echo "performing quantification"
   python3 $PEAK_WALK/python/GCQuant.py -i $featuredir"/feature.sample.i.csv" -d $batchfile -s $stdlib -q $featuredir"/feature.sample.quant.csv"
   python3 $PEAK_WALK/python/GCSummary.py -f $featuredir -b $batchfile -s $stdlib -x --quant
+  if [[ ! -z "$correlation" ]]; then
+    python3 $PEAK_WALK/python/GCSummary.py -f $featuredir -b $batchfile -s $stdlib -x --quant -c $correlation -n feature.subject.qsummary.corr.csv
+  fi
 fi
 

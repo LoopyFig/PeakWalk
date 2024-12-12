@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 
 # get input options
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "f:i:r:m:q:n:b:l:s:xh", ["quant"])
+  opts, args = getopt.getopt(sys.argv[1:], "f:i:r:m:q:n:b:l:s:c:xh", ["quant"])
 except getopt.GetoptError as err:
   print(err)
   sys.exit(2)
@@ -37,6 +37,8 @@ labels = ["subject"] # sample type filter
 stdlib = None # standards library
 repToggle = False # toggles replicate summarization
 quantToggle = False # toggles quantification options
+corrToggle = False
+detectMin = sys.float_info.min
 for o, a in opts:
   if o == "-h":
     print("PeakWalk: Automated GC Identification and Quantification")
@@ -55,6 +57,7 @@ for o, a in opts:
     print("-l filter labels, optional, comma-separated, requires -b")
     print("-s standards library, optional, function not implemented")
     print("-x toggle replicate summarization, optional, requires -b")
+    print("-c sets correlation filter, optional")
     print("-h help, optional")
     sys.exit()
   if o == "-f":
@@ -82,6 +85,9 @@ for o, a in opts:
     stdlib = a
   if o == "-x":
     repToggle = True
+  if o == "-c":
+    corrToggle = True
+    corrMin = float(a)
 
 # read in data based on input
 intensities = pd.read_csv(os.path.abspath(featuresLoc + intensitiesLoc), sep=",")
@@ -195,6 +201,45 @@ summaries["iCV"] = summaries["iStd"].div(summaries["iMean"])
 summaries["detectCnt"] = intensities.count(axis=1)
 summaries["detectFrac"] = summaries["detectCnt"].div(len(intensities.columns))
 
+# quality-based filtering
+summaries["badFlag"] = 0
+summaries.loc[(summaries["detectFrac"] < detectMin), "badFlag"] = 1
+# optional correlation-based filtering
+if corrToggle:
+  summaries.loc[(summaries["detectCnt"] < 3), "badFlag"] = 1
+  ids = summaries[(summaries["badFlag"] == 0)]["id"].drop_duplicates()
+  summaries["corrMean"] = 0
+  for i in ids:
+    frags = summaries.index[(summaries["id"] == i) & (summaries["badFlag"] == 0)].to_numpy()
+    fragCnt = len(frags)
+    print(str(i) + " " + str(frags) + " " + str(fragCnt))
+    if fragCnt > 1:
+      fragCorr = intensities.loc[frags].T.corr().values
+      np.fill_diagonal(fragCorr, np.nan)
+      noOverlap = np.isnan(fragCorr).all(axis=1)
+      summaries.loc[frags[noOverlap], "badFlag"] = 1
+      frags = frags[~noOverlap]
+      fragCorr = fragCorr[~noOverlap, :][:, ~noOverlap]
+      print(str(fragCorr))
+      fragCnt = fragCnt - np.count_nonzero(noOverlap)
+      while fragCnt > 1:
+        meanCorr = np.nanmean(fragCorr, axis=0)
+        worstFrag = np.argmin(meanCorr)
+        print(worstFrag)
+        print(meanCorr)
+        if meanCorr[worstFrag] < corrMin:
+          summaries.loc[frags[worstFrag], "badFlag"] = 1
+          frags = np.delete(frags, worstFrag)
+          fragCorr = np.delete(fragCorr, worstFrag, 0)
+          fragCorr = np.delete(fragCorr, worstFrag, 1)
+          fragCnt -= 1
+        else:
+          for j in range(0, len(frags)):
+            summaries.loc[frags[j], "corrMean"] = meanCorr[j]
+          break
+    if fragCnt <= 1:
+      summaries.loc[frags, "badFlag"] = 1
+
 # identification quality and best fragment identification
 ids = summaries[(summaries["detectCnt"] > 0)]["id"].drop_duplicates()
 summaries["fragCnt"] = 0
@@ -239,7 +284,9 @@ if quantToggle:
 summaryFields = ["mzMed", "rtMed", "tmz", "trt", "id", "subid", "name", "monoisotopic", "formula", "cas", "mzMin", "mzMax", "mzRange", "rtMin", "rtMax", "rtRange", "iMean", "iStd", "iCV"]
 if libsamples:
   summaryFields = summaryFields + ["libFragCnt", "libQualityFrac"]
-summaryFields = summaryFields + ["detectCnt", "detectFrac", "fragCnt", "qualityCnt", "qualityFrac", "bestFlag"]
+summaryFields = summaryFields + ["detectCnt", "detectFrac", "fragCnt", "qualityCnt", "qualityFrac", "bestFlag", "badFlag"]
+if corrToggle:
+  summaryFields = summaryFields + ["corrMean"]
 if quantToggle:
   summaryFields = summaryFields + ["beta", "bestQuantFlag"]
 summaries = summaries[summaryFields]
@@ -252,7 +299,8 @@ else:
   summaries = summaries[summaries["beta"] > 0]
 
 # filter rows
-summaries = summaries[summaries["detectCnt"] > 0]
+summaries = summaries[summaries["badFlag"] == 0]
+summaries.drop('badFlag', axis=1, inplace=True)
 
 # write summary file
 summaries.to_csv(summaryname)

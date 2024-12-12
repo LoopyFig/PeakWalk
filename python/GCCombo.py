@@ -17,6 +17,9 @@ warnings.filterwarnings('ignore')
 # import dtw
 from fastdtw import fastdtw
 
+# set global variables
+drtMax = 0.02
+
 # DTW similarity score
 def DTW(trtdelta, rtdelta):
   _, path = fastdtw(rtdelta, trtdelta)
@@ -103,6 +106,8 @@ def irtFilter(ids, idSubids, mzRts):
   # Clean-up matches outside a reasonable rt bound
   # Bound is approximated via double the 3rd quantile of deltart
   drtBound = 2*idSubids[~np.isnan(idSubids.drt)].drt.quantile(0.75)
+  if drtBound > drtMax:
+    drtBound = drtMax
   return (ids, idSubids, drtBound)
 
 # Perform first shot matching based on rt
