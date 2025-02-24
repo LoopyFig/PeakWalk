@@ -249,7 +249,7 @@ for i in ids:
   # get the number of detected fragments per id
   # get number of quality detections per id
   #   a quality detection is defined as 3 detected fragments in one sample
-  frags = summaries.index[(summaries["id"] == i) & (summaries["detectCnt"] > 0)].tolist()
+  frags = summaries.index[(summaries["id"] == i) & (summaries["badFlag"] == 0)].tolist()
   summaries.loc[frags, "fragCnt"] = len(frags)
   simulCnt = intensities.loc[frags].count(axis=0)
   summaries.loc[frags, "qualityCnt"] = (simulCnt >= 3).sum()
@@ -272,10 +272,10 @@ if quantToggle:
       replicates[source] = quants[batchinfo[batchinfo["id"] == source]["sample"]].median(axis=1)
     quants = replicates
   # identify the best fragment for quantification via detected count and subid and presence of standards
-  ids = summaries[(summaries["detectCnt"] > 0) & (summaries["beta"] > 0)]["id"].drop_duplicates()
+  ids = summaries[(summaries["badFlag"] == 0) & (summaries["beta"] > 0)]["id"].drop_duplicates()
   summaries["bestQuantFlag"] = 0
   for i in ids:
-    frags = summaries.index[(summaries["id"] == i) & (summaries["detectCnt"] > 0) & (summaries["beta"] > 0)].tolist()
+    frags = summaries.index[(summaries["id"] == i) & (summaries["badFlag"] == 0) & (summaries["beta"] > 0)].tolist()
     detectCntMax = summaries.loc[frags]["detectCnt"].max()
     subidMin = summaries.loc[(summaries["id"] == i) & (summaries["detectCnt"] == detectCntMax) & (summaries["beta"] > 0), "subid"].min()
     summaries.loc[(summaries["id"] == i) & (summaries["subid"] == subidMin), "bestQuantFlag"] = 1

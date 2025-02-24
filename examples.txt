@@ -1,8 +1,8 @@
 # running from raw
-$PEAK_WALK/PeakWalk.sh -r raw/ -t ~/data/BEST/BP1.csv -b batch.csv -s BP1 -p 30
+$PEAK_WALK/PeakWalk.sh -r raw/ -t ~/data/BEST/BP1.csv -b batch.csv -s BP1 -p 30 -c 0.6
 
 # running from mzXML
-$PEAK_WALK/PeakWalk.sh -x raw/mzxml/ -t ~/data/BEST/BP1.csv -b batch.csv -s BP1 -p 30
+$PEAK_WALK/PeakWalk.sh -x raw/mzxml/ -t ~/data/BEST/BP1.csv -b batch.csv -s BP1 -p 30 -0.6
 
 # running only post raw steps
-$PEAK_WALK/PeakWalk.sh -t ~/data/BEST/BP1.csv -b batch.csv -s BP1 -p 30
+$PEAK_WALK/PeakWalk.sh -t ~/data/BEST/BP1.csv -b batch.csv -s BP1 -p 30 -c 0.6

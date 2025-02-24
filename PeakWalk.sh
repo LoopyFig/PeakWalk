@@ -3,8 +3,9 @@
 processors="1"
 adapdir="./adap"
 featuredir="./feature"
+version="4"
 
-while getopts "hr::x::t::o::a::f::b::s::p::c::" option; do
+while getopts "hr::x::t::o::a::f::b::s::p::c::v::" option; do
   case $option in
     h)
       echo "-h Get Program Description"
@@ -25,6 +26,7 @@ while getopts "hr::x::t::o::a::f::b::s::p::c::" option; do
       echo "-p number of parallel processors to use for processing"
       echo "-c specifies a correlation threshold for additional summary"
       echo "  requires replicate summary to be active"
+      echo "-v specifies which version of mzmine to use"
       exit;;
     r)
       rawdir=$OPTARG;;
@@ -48,6 +50,8 @@ while getopts "hr::x::t::o::a::f::b::s::p::c::" option; do
       processors=$OPTARG;;
     c)
       correlation=$OPTARG;;
+    v)
+      version=$OPTARG;;
   esac
 done
 
@@ -64,9 +68,9 @@ fi
 if [[ ! -z "$rawdir" ]]; then
   mkdir -p $adapdir
   echo "making xml directions for extraction"
-  python3 $PEAK_WALK/python/adapGC.py -r $rawdir -a $adapdir
+  python3 $PEAK_WALK/python/adapGC.py -r $rawdir -a $adapdir -v $version
   echo "running extraction"
-  bash $PEAK_WALK/bash/runmzmine.sh -a $adapdir -p $processors
+  bash $PEAK_WALK/bash/runmzmine.sh -a $adapdir -p $processors -v $version
 fi
 
 if [[ ! -z "$targetlist" ]]; then

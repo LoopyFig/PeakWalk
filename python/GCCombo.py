@@ -20,6 +20,10 @@ from fastdtw import fastdtw
 # set global variables
 drtMax = 0.02
 
+# setup logging
+log = "log.txt"
+loglock = Lock()
+
 # DTW similarity score
 def DTW(trtdelta, rtdelta):
   _, path = fastdtw(rtdelta, trtdelta)
@@ -105,7 +109,7 @@ def irtFilter(ids, idSubids, mzRts):
 
   # Clean-up matches outside a reasonable rt bound
   # Bound is approximated via double the 3rd quantile of deltart
-  drtBound = 2*idSubids[~np.isnan(idSubids.drt)].drt.quantile(0.75)
+  drtBound = 2*idSubids[(~np.isnan(idSubids.drt)) & (idSubids.drt > 0)].drt.quantile(0.75)
   if drtBound > drtMax:
     drtBound = drtMax
   return (ids, idSubids, drtBound)
@@ -310,6 +314,10 @@ def targetSearch(targets, sample, boundTestLimit = np.inf, dtw = True):
     matchCount = newCount
 
   # print("drtBound: " + str(drtBound))
+  loglock.acquire()
+  with open(log, "a") as logfile:
+    logfile.write(str(drtBound) + "\n")
+  loglock.release()
 
   # Second shot matching
   matches, ids, idSubids, mzRts, drtHypothesis = secondShot(matches, ids, idSubids, mzRts, drtBound)
@@ -363,7 +371,7 @@ def runSample(targets, mzindex, rtindex, iindex, boundTestLimit, adapdir, ADAP, 
     if shift:
       matches = targetSearch(targets, sample, boundTestLimit, dtw)
       targets, rtShift = shiftRt(targets, matches, trtSmallBound)
-      print(adap + " " + str(rtShift))
+      # print(adap + " " + str(rtShift))
       matches = targetSearch(targets, sample, boundTestLimit, dtw)
       targets[["trtupper","trtlower"]] = ortBounds[["trtupper", "trtlower"]]
     else:

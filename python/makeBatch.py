@@ -9,17 +9,27 @@ batches = []
 for file in os.listdir(dir):
   path = os.path.join(dir, file)
   if os.path.isfile(path):
-    isbatch = re.search(pattern, file)
+    isbatch = re.search(batchPattern, file)
     if isbatch:
       batch = pd.read_csv(path)
-      batch["batch"] = int(isbatch.group(0))
+      batch["batch"] = int(isbatch.group(1))
       batches.append(batch)
 
-batches = pd.concat(batches)
-batch = batch[["Filename","Sample.ID","Batch"]]
+batch = pd.concat(batches)
+batch = batch[["Filename","Sample ID","batch"]]
 batch.columns = ["sample","id","batch"]
 batch["id"] = batch["id"].str.replace(r'_[0-9]+$','',regex = True)
 batch["type"] = "ignore"
+batch = batch[~batch["sample"].isnull()]
+
+if len(sys.argv) > 2:
+  raws = pd.Series(os.listdir(sys.argv[2]))
+  raws = raws[raws.str.fullmatch(r'.*\.csv$')]
+  raws = raws.str.replace(r'\.csv$','',regex=True)
+  missing = ~batch["sample"].isin(raws)
+  print(batch.loc[missing])
+  batch = batch.loc[~missing]
+
 batch.loc[batch["sample"].str.fullmatch("^BL_.*"), "type"] = "subject"
 batch.loc[batch["sample"].str.fullmatch("^wash.*"), "type"] = "wash"
 batch.loc[batch["sample"].str.fullmatch("^NIST1958.*"), "type"] = "NIST1958"

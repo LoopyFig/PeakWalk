@@ -2,8 +2,7 @@
 
 import getopt, sys, os
 
-def main():
-  batchFile = (
+batchOptions = [
 """<?xml version="1.0" encoding="UTF-8"?><batch>
     <batchstep method="io.github.mzmine.modules.io.rawdataimport.RawDataImportModule">
         <parameter name="Raw data file names">
@@ -288,17 +287,138 @@ def main():
         <parameter name="Identification separator">;</parameter>
         <parameter name="Filter rows">ALL</parameter>
     </batchstep>
-</batch>"""
-    )
+</batch>""",
+"""<?xml version="1.0" encoding="UTF-8"?><batch mzmine_version="4.4.3">
+    <batchstep method="io.github.mzmine.modules.io.import_rawdata_mzxml.MzXMLImportModule" parameter_version="1">
+        <parameter name="File names">
+            <file>{mzXML}</file>
+        </parameter>
+    </batchstep>
+    <batchstep method="io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionModule" parameter_version="1">
+        <parameter name="Raw data files" type="BATCH_LAST_FILES"/>
+        <parameter name="Scan filters" selected="true">
+            <parameter name="Scan number"/>
+            <parameter name="Base Filtering Integer"/>
+            <parameter name="Retention time"/>
+            <parameter name="Mobility"/>
+            <parameter name="MS level filter" selected="All MS levels">1</parameter>
+            <parameter name="Scan definition"/>
+            <parameter name="Polarity">Any</parameter>
+            <parameter name="Spectrum type">ANY</parameter>
+        </parameter>
+        <parameter name="Scan types (IMS)">All scan types</parameter>
+        <parameter name="Denormalize fragment scans (traps)">false</parameter>
+        <parameter name="Mass detector" selected_item="Auto">
+            <module name="Factor of lowest signal">
+                <parameter name="Noise factor">2.5</parameter>
+            </module>
+            <module name="Auto">
+                <parameter name="Noise level">1000.0</parameter>
+            </module>
+            <module name="Centroid">
+                <parameter name="Noise level">10000.0</parameter>
+            </module>
+            <module name="Exact mass">
+                <parameter name="Noise level"/>
+            </module>
+            <module name="Local maxima">
+                <parameter name="Noise level"/>
+            </module>
+            <module name="Recursive threshold">
+                <parameter name="Noise level"/>
+                <parameter name="Min m/z peak width"/>
+                <parameter name="Max m/z peak width"/>
+            </module>
+            <module name="Wavelet transform">
+                <parameter name="Noise level"/>
+                <parameter name="Scale level"/>
+                <parameter name="Wavelet window size (%)"/>
+            </module>
+        </parameter>
+    </batchstep>
+    <batchstep method="io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ModularADAPChromatogramBuilderModule" parameter_version="1">
+        <parameter name="Raw data files" type="BATCH_LAST_FILES"/>
+        <parameter name="Scan filters" selected="true">
+            <parameter name="Scan number"/>
+            <parameter name="Base Filtering Integer"/>
+            <parameter name="Retention time"/>
+            <parameter name="Mobility"/>
+            <parameter name="MS level filter" selected="MS1, level = 1">1</parameter>
+            <parameter name="Scan definition"/>
+            <parameter name="Polarity">Any</parameter>
+            <parameter name="Spectrum type">ANY</parameter>
+        </parameter>
+        <parameter name="Minimum consecutive scans">3</parameter>
+        <parameter name="Minimum intensity for consecutive scans">1000.0</parameter>
+        <parameter name="Minimum absolute height">10000.0</parameter>
+        <parameter name="m/z tolerance (scan-to-scan)">
+            <absolutetolerance>0.0</absolutetolerance>
+            <ppmtolerance>10.0</ppmtolerance>
+        </parameter>
+        <parameter name="Suffix">chromatograms</parameter>
+        <parameter name="Allow single scan chromatograms"/>
+    </batchstep>
+    <batchstep method="io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.minimumsearch.MinimumSearchFeatureResolverModule" parameter_version="2">
+        <parameter name="Feature lists" type="BATCH_LAST_FEATURELISTS"/>
+        <parameter name="Suffix">resolved</parameter>
+        <parameter name="Original feature list">REMOVE</parameter>
+        <parameter name="MS/MS scan pairing" selected="false">
+            <parameter name="MS1 to MS2 precursor tolerance (m/z)">
+                <absolutetolerance>0.01</absolutetolerance>
+                <ppmtolerance>10.0</ppmtolerance>
+            </parameter>
+            <parameter name="Retention time filter" selected="Use feature edges" unit="MINUTES">0.2</parameter>
+            <parameter name="Minimum relative feature height" selected="false">0.25</parameter>
+            <parameter name="Minimum required signals" selected="false">1</parameter>
+            <parameter name="Limit by ion mobility edges">false</parameter>
+            <parameter name="Merge MS/MS spectra (TIMS)">false</parameter>
+            <parameter name="Minimum signal intensity (absolute, TIMS)" selected="false">250.0</parameter>
+            <parameter name="Minimum signal intensity (relative, TIMS)" selected="false">0.01</parameter>
+        </parameter>
+        <parameter name="Dimension">Retention time</parameter>
+        <parameter name="Chromatographic threshold">0.85</parameter>
+        <parameter name="Minimum search range RT/Mobility (absolute)">0.05</parameter>
+        <parameter name="Minimum relative height">0.1</parameter>
+        <parameter name="Minimum absolute height">10000.0</parameter>
+        <parameter name="Min ratio of peak top/edge">1.0</parameter>
+        <parameter name="Peak duration range (min/mobility)">
+            <min>0.0</min>
+            <max>1.0</max>
+        </parameter>
+        <parameter name="Minimum scans (data points)">3</parameter>
+    </batchstep>
+    <batchstep method="io.github.mzmine.modules.io.export_features_csv_legacy.LegacyCSVExportModule" parameter_version="1">
+        <parameter name="Feature lists" type="BATCH_LAST_FEATURELISTS"/>
+        <parameter name="Filename">
+            <current_file>{output}</current_file>
+            <last_file>{output}</last_file>
+        </parameter>
+        <parameter name="Field separator">,</parameter>
+        <parameter name="Export common elements">
+            <item>Export row m/z</item>
+            <item>Export row retention time</item>
+        </parameter>
+        <parameter name="Export data file elements">
+            <item>Feature duration time</item>
+            <item>Peak area</item>
+        </parameter>
+        <parameter name="Export quantitation results and other information">false</parameter>
+        <parameter name="Identification separator">;</parameter>
+        <parameter name="Filter rows">ALL</parameter>
+    </batchstep>
+</batch>"""]
 
+
+def main():
   try:
-      opts, args = getopt.getopt(sys.argv[1:], "r:a:s:")
+      opts, args = getopt.getopt(sys.argv[1:], "r:a:s:v:")
   except getopt.GetoptError as err:
     print(err)
     sys.exit(2)
   rawdir=None
   adapdir=None
   suffix=".mzXML"
+  batchFile = batchOptions[1]
   print(opts)
   for o, a in opts:
     if o == "-r":
@@ -310,6 +430,13 @@ def main():
     elif o == "-s":
       print(a)
       suffix = "." + a
+    elif o == "-v":
+      if a == "2":
+        print("mzmine v2")
+        batchFile = batchOptions[0]
+      elif a == "4":
+        print("mzmine v4")
+        batchFile = batchOptions[1]
     else:
       print(o)
       print(a)
@@ -336,7 +463,7 @@ def findRaw(dir, raws, suffix, depth):
       if len(element) > len(suffix) and element[-len(suffix):] == suffix:
         raws.append(element)
     elif depth < 3:
-      raws = findRaw(elementpath, raws, depth+1)
+      raws = findRaw(elementpath, raws, suffix, depth+1)
   return raws
 
 if __name__ == "__main__":
